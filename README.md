@@ -133,13 +133,68 @@ That's why Fix 2 and Fix 3 use the DB — shared by all servers.
 
 ---
 
-## Coming Next
+## Fix 3 — `SELECT FOR UPDATE` (Pessimistic Lock) ✅
 
-| Fix | Technique | Where protection lives | Works on multiple servers? |
-|-----|-----------|----------------------|---------------------------|
-| 1 | `synchronized` method ✅ | JVM memory | No |
-| 2 | DB unique constraint + catch `DataIntegrityViolationException` | Database | Yes |
-| 3 | `SELECT FOR UPDATE` (pessimistic lock) | Database row lock | Yes |
+**Branch:** `fix-3-pessimistic-lock`
+
+**Endpoint:**
+```
+POST /api/v3/redeem-coupon?couponId=1&userId=user1
+```
+
+**How it works:**
+
+Added a locked query in the repository:
+```java
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT c FROM Coupon c WHERE c.id = :id")
+Optional<Coupon> findByIdWithLock(@Param("id") Long id);
+```
+
+This generates: `SELECT * FROM coupons WHERE id = ? FOR UPDATE`
+
+PostgreSQL locks that row the moment Thread A reads it.
+Thread B hits the same SELECT and is **blocked at the DB level** until Thread A's transaction commits.
+
+```
+Thread A → SELECT ... FOR UPDATE → gets lock
+Thread B → SELECT ... FOR UPDATE → BLOCKED at PostgreSQL
+Thread A → count=0 → INSERT → commit → lock released
+Thread B → unblocked → count=1 → FAILED
+```
+
+**Why `@Transactional` is critical:**
+The lock is held for the duration of the transaction.
+Without `@Transactional`, the lock releases right after the SELECT — race condition comes back.
+
+**Result with 100 concurrent requests:**
+
+```
+ id | coupon_id | user_id |        redeemed_at
+----+-----------+---------+----------------------------
+  1 |         1 | user30  | 2026-04-10 20:51:09.714943
+(1 row)
+```
+
+| Expected winners | Actual winners |
+|-----------------|----------------|
+| 1               | **1 ✅**        |
+
+**Why this is better than `synchronized`:**
+
+The lock lives inside PostgreSQL — shared across all servers.
+Works even with 10 instances of this app running simultaneously.
+
+---
+
+## All Fixes — Summary
+
+| Fix | Technique | Where lock lives | Works multi-server? | Branch |
+|-----|-----------|-----------------|-------------------|--------|
+| v1 | No protection (broken) | — | — | `main` |
+| v2 | `synchronized` method | JVM memory | No | `main` |
+| v3 | Unique constraint + catch exception | PostgreSQL | Yes | `fix-2-unique-constraint` |
+| v3 | `SELECT FOR UPDATE` | PostgreSQL row lock | Yes | `fix-3-pessimistic-lock` |
 
 ---
 
