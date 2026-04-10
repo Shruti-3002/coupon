@@ -4,6 +4,9 @@ import com.example.coupon.entity.Coupon;
 import com.example.coupon.entity.Redemption;
 import com.example.coupon.repository.CouponRepository;
 import com.example.coupon.repository.RedemptionRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +15,9 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final RedemptionRepository redemptionRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public CouponService(CouponRepository couponRepository,
                          RedemptionRepository redemptionRepository) {
@@ -76,5 +82,36 @@ public class CouponService {
         redemptionRepository.save(redemption);
 
         return "SUCCESS - redeemed by " + userId;
+    }
+
+    // ---------------------------------------------------------------
+    // FIX 2: unique constraint + catch DataIntegrityViolationException
+    //
+    // No check at all. Just try to INSERT directly.
+    // The DB has UNIQUE(coupon_id) on redemptions table.
+    // First thread  → INSERT succeeds ✓
+    // Every other   → INSERT rejected by DB → exception → FAILED
+    //
+    // WHY better than synchronized:
+    // The DB is shared across all servers.
+    // Works even with 10 instances of this app running.
+    // ---------------------------------------------------------------
+    @Transactional
+    public String redeemUniqueConstraint(Long couponId, String userId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new RuntimeException("Coupon not found"));
+
+        try {
+            Redemption redemption = new Redemption();
+            redemption.setCoupon(coupon);
+            redemption.setUserId(userId);
+            redemptionRepository.save(redemption);
+            entityManager.flush(); // force INSERT now so exception is caught here
+
+            return "SUCCESS - redeemed by " + userId;
+
+        } catch (DataIntegrityViolationException e) {
+            return "FAILED - coupon fully redeemed";
+        }
     }
 }

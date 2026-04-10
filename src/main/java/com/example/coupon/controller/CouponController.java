@@ -5,7 +5,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api")
 public class CouponController {
 
     private final CouponService couponService;
@@ -14,25 +13,33 @@ public class CouponController {
         this.couponService = couponService;
     }
 
-    // BROKEN — race condition lives here
-    // POST /api/redeem-coupon?couponId=1&userId=user1
-    @PostMapping("/redeem-coupon")
-    public ResponseEntity<String> redeem(
+    // v1 — BROKEN: race condition (no protection)
+    // POST /api/v1/redeem-coupon?couponId=1&userId=user1
+    @PostMapping("/api/v1/redeem-coupon")
+    public ResponseEntity<String> redeemV1(
             @RequestParam Long couponId,
             @RequestParam String userId) {
 
-        String result = couponService.redeemNaive(couponId, userId);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(couponService.redeemNaive(couponId, userId));
     }
 
-    // FIX 1 — synchronized method
-    // POST /api/redeem-coupon/synchronized?couponId=1&userId=user1
-    @PostMapping("/redeem-coupon/synchronized")
-    public ResponseEntity<String> redeemSynchronized(
+    // v2 — FIX 1: synchronized (JVM-level lock)
+    // POST /api/v2/redeem-coupon?couponId=1&userId=user1
+    @PostMapping("/api/v2/redeem-coupon")
+    public ResponseEntity<String> redeemV2(
             @RequestParam Long couponId,
             @RequestParam String userId) {
 
-        String result = couponService.redeemSynchronized(couponId, userId);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(couponService.redeemSynchronized(couponId, userId));
+    }
+
+    // v3 — FIX 2: unique constraint + catch DataIntegrityViolationException
+    // POST /api/v3/redeem-coupon?couponId=1&userId=user1
+    @PostMapping("/api/v3/redeem-coupon")
+    public ResponseEntity<String> redeemV3(
+            @RequestParam Long couponId,
+            @RequestParam String userId) {
+
+        return ResponseEntity.ok(couponService.redeemUniqueConstraint(couponId, userId));
     }
 }

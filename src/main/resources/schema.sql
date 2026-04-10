@@ -15,7 +15,11 @@ CREATE TABLE redemptions (
     id          BIGSERIAL    PRIMARY KEY,
     coupon_id   BIGINT       NOT NULL REFERENCES coupons(id),
     user_id     VARCHAR(100) NOT NULL,
-    redeemed_at TIMESTAMP    DEFAULT NOW()
+    redeemed_at TIMESTAMP    DEFAULT NOW(),
+
+    -- Fix 2: DB enforces only 1 redemption per coupon (quantity = 1)
+    -- Second INSERT throws DataIntegrityViolationException → caught in service
+    CONSTRAINT unique_coupon_redemption UNIQUE (coupon_id)
 );
 
 -- Seed data: 1 coupon, only 1 person allowed to redeem
