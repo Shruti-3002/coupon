@@ -77,4 +77,38 @@ public class CouponService {
 
         return "SUCCESS - redeemed by " + userId;
     }
+
+    // ---------------------------------------------------------------
+    // FIX 3: SELECT FOR UPDATE (pessimistic lock)
+    //
+    // findByIdWithLock() generates: SELECT * FROM coupons WHERE id=? FOR UPDATE
+    // PostgreSQL locks that row — Thread B is blocked at DB level until
+    // Thread A's transaction commits and releases the lock.
+    //
+    // WHY better than synchronized:
+    // Lock lives in PostgreSQL — shared across all servers.
+    // Works with 10 instances of this app running simultaneously.
+    //
+    // @Transactional is critical — lock is held for the entire transaction.
+    // Without it, lock releases immediately after SELECT and bug comes back.
+    // ---------------------------------------------------------------
+    @Transactional
+    public String redeemPessimisticLock(Long couponId, String userId) {
+        // This SELECT locks the row — all other threads wait here
+        Coupon coupon = couponRepository.findByIdWithLock(couponId)
+                .orElseThrow(() -> new RuntimeException("Coupon not found"));
+
+        long alreadyRedeemed = redemptionRepository.countByCoupon(coupon);
+
+        if (alreadyRedeemed >= coupon.getQuantity()) {
+            return "FAILED - coupon fully redeemed";
+        }
+
+        Redemption redemption = new Redemption();
+        redemption.setCoupon(coupon);
+        redemption.setUserId(userId);
+        redemptionRepository.save(redemption);
+
+        return "SUCCESS - redeemed by " + userId;
+    }
 }

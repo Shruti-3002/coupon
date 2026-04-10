@@ -35,4 +35,14 @@ public class CouponController {
         String result = couponService.redeemSynchronized(couponId, userId);
         return ResponseEntity.ok(result);
     }
+
+    // v3 — FIX 3: SELECT FOR UPDATE (pessimistic lock)
+    // POST /api/v3/redeem-coupon?couponId=1&userId=user1
+    @PostMapping("/v3/redeem-coupon")
+    public ResponseEntity<String> redeemV3(
+            @RequestParam Long couponId,
+            @RequestParam String userId) {
+
+        return ResponseEntity.ok(couponService.redeemPessimisticLock(couponId, userId));
+    }
 }
