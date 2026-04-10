@@ -24,4 +24,15 @@ public class CouponController {
         String result = couponService.redeemNaive(couponId, userId);
         return ResponseEntity.ok(result);
     }
+
+    // FIX 1 — synchronized method
+    // POST /api/redeem-coupon/synchronized?couponId=1&userId=user1
+    @PostMapping("/redeem-coupon/synchronized")
+    public ResponseEntity<String> redeemSynchronized(
+            @RequestParam Long couponId,
+            @RequestParam String userId) {
+
+        String result = couponService.redeemSynchronized(couponId, userId);
+        return ResponseEntity.ok(result);
+    }
 }

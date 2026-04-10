@@ -83,13 +83,63 @@ All 10 timestamps are within the same millisecond — proof that threads collide
 
 ---
 
-## Coming Next — 3 Fixes
+## Fix 1 — `synchronized` method ✅
 
-| Fix | Technique | Where protection lives |
-|-----|-----------|----------------------|
-| 1 | `synchronized` method | JVM level |
-| 2 | DB unique constraint + catch `DataIntegrityViolationException` | Database |
-| 3 | `SELECT FOR UPDATE` (pessimistic lock) | Database row lock |
+**Endpoint:**
+```
+POST /api/redeem-coupon/synchronized?couponId=1&userId=user1
+```
+
+**How it works:**
+
+The `synchronized` keyword puts a JVM-level lock on the method.
+Only 1 thread can enter at a time. All others wait.
+
+```
+Without synchronized:               With synchronized:
+Thread A → enters                   Thread A → enters
+Thread B → enters  (parallel)       Thread B → WAITS
+Thread C → enters  (parallel)       Thread C → WAITS
+                                    Thread A → exits
+                                    Thread B → enters → exits
+                                    Thread C → enters → exits
+```
+
+**Result with 100 concurrent requests:**
+
+```
+ id | coupon_id | user_id |        redeemed_at
+----+-----------+---------+----------------------------
+  1 |         1 | user56  | 2026-04-10 14:14:36.361113
+(1 row)
+```
+
+| Expected winners | Actual winners |
+|-----------------|----------------|
+| 1               | **1 ✅**        |
+
+**Limitation:**
+
+Only works on a single JVM (single server).
+In production with multiple instances:
+
+```
+Server 1 (JVM 1) — has its own lock in memory
+Server 2 (JVM 2) — has its own lock in memory
+```
+
+These locks don't know about each other. Race condition comes back.
+That's why Fix 2 and Fix 3 use the DB — shared by all servers.
+
+---
+
+## Coming Next
+
+| Fix | Technique | Where protection lives | Works on multiple servers? |
+|-----|-----------|----------------------|---------------------------|
+| 1 | `synchronized` method ✅ | JVM memory | No |
+| 2 | DB unique constraint + catch `DataIntegrityViolationException` | Database | Yes |
+| 3 | `SELECT FOR UPDATE` (pessimistic lock) | Database row lock | Yes |
 
 ---
 

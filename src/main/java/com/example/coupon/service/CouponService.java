@@ -47,4 +47,34 @@ public class CouponService {
 
         return "SUCCESS - redeemed by " + userId;
     }
+
+    // ---------------------------------------------------------------
+    // FIX 1: synchronized
+    //
+    // Only 1 thread can enter this method at a time.
+    // The JVM puts a lock on the object — every other thread waits.
+    // Now the read → check → write happens without interruption.
+    //
+    // LIMITATION: only works on a single JVM (single server).
+    // If you run 2 instances of this app, each has its own lock
+    // and the race condition comes back.
+    // ---------------------------------------------------------------
+    @Transactional
+    public synchronized String redeemSynchronized(Long couponId, String userId) {
+        Coupon coupon = couponRepository.findById(couponId)
+                .orElseThrow(() -> new RuntimeException("Coupon not found"));
+
+        long alreadyRedeemed = redemptionRepository.countByCoupon(coupon);
+
+        if (alreadyRedeemed >= coupon.getQuantity()) {
+            return "FAILED - coupon fully redeemed";
+        }
+
+        Redemption redemption = new Redemption();
+        redemption.setCoupon(coupon);
+        redemption.setUserId(userId);
+        redemptionRepository.save(redemption);
+
+        return "SUCCESS - redeemed by " + userId;
+    }
 }
